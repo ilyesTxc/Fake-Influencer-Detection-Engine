@@ -1,0 +1,27 @@
+{
+  "mouraderouge": [
+    {
+      "timestamp": "2026-05-01T22:02:24.477020+00:00",
+      "trust_score": 84,
+      "followers": 505186,
+      "engagement_rate": 4.26,
+      "posts_count": 550
+    }
+  ],
+  "koul_time": [
+    {
+      "timestamp": "2026-05-01T23:28:20.690755+00:00",
+      "trust_score": 83,
+      "followers": 691925,
+      "engagement_rate": 10.32,
+      "posts_count": 229
+    },
+    {
+      "timestamp": "2026-05-01T23:30:29.687573+00:00",
+      "trust_score": 83,
+      "followers": 691925,
+      "engagement_rate": 10.32,
+      "posts_count": 229
+    }
+  ]
+}

@@ -37,8 +37,8 @@ def report_node(state: InfluencerState) -> InfluencerState:
 
 Influencer: {inf.get('name')} | {inf.get('city')}, {inf.get('country')} | {inf.get('platform')} | {inf.get('niche')}
 Followers: {inf.get('followers'):,} | Engagement: {inf.get('engagement_rate')}%
-Trust Score: {score}/100 ({label})
-Score breakdown: Engagement={breakdown.get('engagement')}/30, Ratio={breakdown.get('ratio')}/20, Fake detection={breakdown.get('fake_detect')}/25, Consistency={breakdown.get('consistency')}/10, Completeness={breakdown.get('completeness')}/10, Age={breakdown.get('age')}/5
+Final Score: {score}/100 ({label})
+Score breakdown: Engagement={breakdown.get('engagement')}/25, Ratio={breakdown.get('ratio')}/15, Fake detection={breakdown.get('fake_detect')}/15, Bot detection={breakdown.get('bot_detect')}/10, Consistency={breakdown.get('consistency')}/10, Completeness={breakdown.get('completeness')}/10, Age={breakdown.get('age')}/5, Product fit={breakdown.get('product_match')}/10
 Product/Brand: {product if product else 'General campaign'}
 
 Write a 2-sentence recommendation in French for a Tunisian brand. Be direct and specific."""

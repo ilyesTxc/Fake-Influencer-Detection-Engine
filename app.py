@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.dirname(__file__))
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+from nodes.scoring import score_influencer
 
 st.set_page_config(
     page_title="TrustInflu",
@@ -22,7 +23,10 @@ with open(os.path.join(os.path.dirname(__file__), "static", "style.css")) as f:
 # ── Load data ────────────────────────────────────────────────────────────────
 @st.cache_data
 def load_influencers():
-    return pd.read_csv(os.path.join(os.path.dirname(__file__), "data", "influencers.csv"))
+    frame = pd.read_csv(os.path.join(os.path.dirname(__file__), "data", "influencers.csv"))
+    frame = frame.copy()
+    frame["trust_score"] = [score_influencer(row.to_dict())["trust_score"] for _, row in frame.iterrows()]
+    return frame
 
 @st.cache_data
 def load_brands():
@@ -91,6 +95,7 @@ with st.sidebar:
         "📊 Audit",
         "🏢 Brand Match",
         "🏆 Classement",
+        "🔎 Scrape Instagram",
     ], label_visibility="collapsed")
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -231,6 +236,11 @@ elif page == "📊 Audit":
 
     selected_name = st.selectbox("Choisir un influenceur", names, index=default_idx)
     row = df[df["name"] == selected_name].iloc[0]
+    product_desc = st.text_input(
+        "🏷️ Contexte produit / campagne (optionnel)",
+        placeholder="Ex: Lancement d'un nouveau yaourt Délice Maghreb...",
+        key="product_desc_input",
+    )
 
     col1, col2 = st.columns([1, 2])
 
@@ -265,31 +275,16 @@ elif page == "📊 Audit":
         </div>""", unsafe_allow_html=True)
 
     with col2:
-        from nodes.trust_score_node import trust_score_node, get_tier, engagement_score
-        from nodes.state import InfluencerState
-
         inf = row.to_dict()
-        fake_prob = max(0.0, min(1.0, 1.0 - row.trust_score / 100 * 1.3))
-
-        state: InfluencerState = {
-            "influencer": inf,
-            "fake_probability": fake_prob,
-            "bot_score": None,
-            "product_match_score": None,
-            "trust_score": None,
-            "trust_label": None,
-            "score_breakdown": None,
-            "recommendation": None,
-            "product_description": "",
-        }
-        result = trust_score_node(state)
+        result = score_influencer(inf, product_desc)
         breakdown = result["score_breakdown"]
 
         # Radar chart
-        categories = ["Engagement", "Ratio", "Faux followers", "Consistance", "Profil", "Ancienneté"]
-        maxvals = [30, 20, 25, 10, 10, 5]
+        categories = ["Engagement", "Ratio", "Faux followers", "Bots", "Consistance", "Profil", "Ancienneté", "Fit produit"]
+        maxvals = [25, 15, 15, 10, 10, 10, 5, 10]
         vals = [breakdown["engagement"], breakdown["ratio"], breakdown["fake_detect"],
-                breakdown["consistency"], breakdown["completeness"], breakdown["age"]]
+            breakdown["bot_detect"], breakdown["consistency"], breakdown["completeness"],
+            breakdown["age"], breakdown["product_match"]]
         pct = [round(v/m*100) for v, m in zip(vals, maxvals)]
 
         fig = go.Figure(go.Scatterpolar(
@@ -314,9 +309,10 @@ elif page == "📊 Audit":
         st.plotly_chart(fig, use_container_width=True)
 
         # Bar chart per signal
-        signal_labels = ["Engagement<br>(30pts)", "Ratio F/S<br>(20pts)",
-                         "Faux<br>(25pts)", "Posts<br>(10pts)",
-                         "Profil<br>(10pts)", "Âge<br>(5pts)"]
+        signal_labels = ["Engagement<br>(25pts)", "Ratio F/S<br>(15pts)",
+                 "Faux<br>(15pts)", "Bots<br>(10pts)",
+                 "Posts<br>(10pts)", "Profil<br>(10pts)",
+                 "Âge<br>(5pts)", "Produit<br>(10pts)"]
         colors = ["#22c55e" if v >= m*0.7 else "#eab308" if v >= m*0.4 else "#ef4444"
                   for v, m in zip(vals, maxvals)]
 
@@ -352,12 +348,6 @@ elif page == "📊 Audit":
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("#### 🤖 Analyse IA — Pipeline LangGraph")
 
-    product_desc = st.text_input(
-        "🏷️ Contexte produit / campagne (optionnel)",
-        placeholder="Ex: Lancement d'un nouveau yaourt Délice Maghreb...",
-        key="product_desc_input",
-    )
-
     col_btn, col_info = st.columns([1, 3])
     with col_btn:
         run_ai = st.button("✨ Générer l'analyse IA", type="primary", use_container_width=True)
@@ -377,7 +367,7 @@ elif page == "📊 Audit":
             ("🔍", "Analyse Profil", "igaudit_clf"),
             ("🤖", "Détection Bots", "twitterclf / tiktokclf"),
             ("📝", "Conformité Posts", "postclf"),
-            ("📊", "Trust Score", "6 signaux ML"),
+            ("📊", "Score composite", "8 signaux ML"),
             ("✨", "Rapport Claude", "claude-haiku-4-5"),
         ]
         cols_p = st.columns(5)
@@ -434,12 +424,14 @@ elif page == "🏢 Brand Match":
     with col2:
         target_niches = [n.strip() for n in brand["target_niches"].split(",")]
         matched = df[df["niche"].isin(target_niches)].copy()
-        matched = matched.sort_values("trust_score", ascending=False).head(5)
+        matched["final_score"] = [score_influencer(row.to_dict(), brand["description"])["trust_score"]
+                                  for _, row in matched.iterrows()]
+        matched = matched.sort_values("final_score", ascending=False).head(5)
 
         st.markdown(f"**Top influenceurs recommandés pour {brand_name}**")
         for i, (_, row) in enumerate(matched.iterrows()):
             medal = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"][i]
-            color = badge_color(row.trust_score)
+            color = badge_color(row["final_score"])
             flag = country_flag(row.country)
             icon = platform_icon(row.platform)
             st.markdown(f"""
@@ -453,8 +445,8 @@ elif page == "🏢 Brand Match":
                         <div style="color:#94a3b8;font-size:0.8rem">{icon} {row.platform} · {row.city} · {row.niche}</div>
                     </div>
                     <div style="text-align:right">
-                        <div style="font-size:1.4rem;font-weight:800;color:{color}">{row.trust_score}</div>
-                        <div style="color:#94a3b8;font-size:0.7rem">Trust Score</div>
+                        <div style="font-size:1.4rem;font-weight:800;color:{color}">{row['final_score']}</div>
+                        <div style="color:#94a3b8;font-size:0.7rem">Final Score</div>
                     </div>
                 </div>
             </div>""", unsafe_allow_html=True)
@@ -531,3 +523,311 @@ elif page == "🏆 Classement":
             yaxis=dict(gridcolor="#1e3a5f", range=[0, 110]),
         )
         st.plotly_chart(fig2, use_container_width=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PAGE 6 — SCRAPE INSTAGRAM
+# ══════════════════════════════════════════════════════════════════════════════
+elif page == "🔎 Scrape Instagram":
+    from nodes.instagram_scraper import scrape_profile
+    from nodes.history import record as history_record, get as history_get
+
+    st.markdown("### 🔎 Scrape & Score — Analyse en temps réel")
+    st.markdown(
+        "<div style='color:#94a3b8;margin-bottom:16px'>"
+        "Entrez un username Instagram pour scraper le profil en direct, "
+        "calculer son Trust Score via le pipeline ML et suivre son évolution dans le temps."
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    col_in1, col_in2, col_in3 = st.columns([2, 2, 1])
+    with col_in1:
+        username_input = st.text_input(
+            "Username Instagram", placeholder="ex: zdeffworld",
+            label_visibility="visible",
+        ).strip().lstrip("@")
+    with col_in2:
+        product_desc_scrape = st.text_input(
+            "Contexte produit (optionnel)",
+            placeholder="Ex: Lancement parfum Oriental...",
+        )
+    with col_in3:
+        st.markdown("<br>", unsafe_allow_html=True)
+        run_scrape = st.button("🚀 Lancer le scraping", type="primary", use_container_width=True)
+
+    if run_scrape and username_input:
+        with st.spinner(f"Scraping @{username_input} en cours…"):
+            try:
+                influencer = scrape_profile(username_input)
+                st.session_state["_scraped_influencer"] = influencer
+                st.session_state["_scraped_product_desc"] = product_desc_scrape
+                st.session_state["_scrape_username"] = username_input
+                st.session_state.pop("_scrape_error", None)
+            except Exception as e:
+                st.session_state["_scrape_error"] = str(e)
+                st.session_state.pop("_scraped_influencer", None)
+
+    if "._scrape_error" in st.session_state:
+        st.error(f"Erreur : {st.session_state['_scrape_error']}")
+
+    if st.session_state.get("_scrape_error"):
+        st.error(f"Erreur lors du scraping : {st.session_state['_scrape_error']}")
+
+    elif "._scraped_influencer" in st.session_state:
+        pass
+
+    if "_scraped_influencer" in st.session_state:
+        inf = st.session_state["_scraped_influencer"]
+        prod_desc = st.session_state.get("_scraped_product_desc", "")
+        uname = st.session_state.get("_scrape_username", inf.get("_username", ""))
+        posts = inf.get("_posts", [])
+
+        # ── Run ML pipeline ────────────────────────────────────────────────
+        result = score_influencer(inf, prod_desc)
+        trust_score = result["trust_score"]
+        breakdown = result["score_breakdown"]
+
+        # ── Save to history ────────────────────────────────────────────────
+        history_record(uname, inf, trust_score)
+
+        color = badge_color(trust_score)
+        label = badge_label(trust_score)
+        flag = country_flag(inf.get("country", "TN"))
+
+        st.divider()
+
+        # ── Profile header ─────────────────────────────────────────────────
+        col_pic, col_info, col_score = st.columns([1, 3, 1])
+        with col_pic:
+            pic_url = inf.get("profile_pic_url", "")
+            if pic_url:
+                st.image(pic_url, width=100)
+            else:
+                st.markdown("👤", unsafe_allow_html=True)
+
+        with col_info:
+            verified = " ✅" if inf.get("_is_verified") else ""
+            st.markdown(f"""
+            <div style="padding:8px 0">
+                <div style="font-size:1.3rem;font-weight:700;color:#e2e8f0">
+                    {inf['name']}{verified} {flag}
+                </div>
+                <div style="color:#94a3b8;font-size:0.85rem">
+                    @{uname} · 📸 Instagram · {inf['niche']}
+                </div>
+                <div style="color:#94a3b8;font-size:0.85rem;margin-top:4px">
+                    {inf.get('bio','')[:120]}
+                </div>
+            </div>""", unsafe_allow_html=True)
+
+        with col_score:
+            st.markdown(render_score_badge(trust_score, 72), unsafe_allow_html=True)
+            st.markdown(
+                f"<div style='text-align:center;color:{color};font-weight:600;"
+                f"font-size:0.85rem;margin-top:6px'>{label}</div>",
+                unsafe_allow_html=True,
+            )
+
+        # ── Key metrics ────────────────────────────────────────────────────
+        st.markdown("<br>", unsafe_allow_html=True)
+        m1, m2, m3, m4, m5, m6 = st.columns(6)
+        metrics = [
+            (m1, "👥 Followers",    f"{inf['followers']:,}"),
+            (m2, "➡️ Following",    f"{inf['following']:,}"),
+            (m3, "❤️ Engagement",   f"{inf['engagement_rate']}%"),
+            (m4, "📸 Posts",        f"{inf['posts_count']:,}"),
+            (m5, "🗓️ Âge compte",   f"{inf['account_age_months']} mois"),
+            (m6, "📢 Pubs sponsos", f"{inf.get('_ad_count', 0)}/{len(posts)}"),
+        ]
+        for col, title, val in metrics:
+            col.markdown(f"""
+            <div style="background:#1a2e4a;border-radius:10px;padding:12px;
+                        text-align:center;border:1px solid #c9a84c33">
+                <div style="color:#94a3b8;font-size:0.72rem">{title}</div>
+                <div style="color:#c9a84c;font-size:1.2rem;font-weight:700">{val}</div>
+            </div>""", unsafe_allow_html=True)
+
+        # ── Charts: Radar + Bar ────────────────────────────────────────────
+        st.markdown("<br>", unsafe_allow_html=True)
+        chart_col1, chart_col2 = st.columns(2)
+
+        categories = ["Engagement","Ratio","Faux followers","Bots",
+                      "Consistance","Profil","Ancienneté","Fit produit"]
+        maxvals = [25, 15, 15, 10, 10, 10, 5, 10]
+        vals = [
+            breakdown["engagement"], breakdown["ratio"], breakdown["fake_detect"],
+            breakdown["bot_detect"], breakdown["consistency"], breakdown["completeness"],
+            breakdown["age"], breakdown["product_match"],
+        ]
+        pct = [round(v / m * 100) for v, m in zip(vals, maxvals)]
+
+        with chart_col1:
+            fig_radar = go.Figure(go.Scatterpolar(
+                r=pct + [pct[0]],
+                theta=categories + [categories[0]],
+                fill="toself",
+                fillcolor="rgba(201,168,76,0.15)",
+                line=dict(color="#c9a84c", width=2),
+                marker=dict(color="#c9a84c", size=6),
+            ))
+            fig_radar.update_layout(
+                polar=dict(
+                    bgcolor="#112240",
+                    radialaxis=dict(visible=True, range=[0, 100],
+                                   gridcolor="#1e3a5f",
+                                   tickfont=dict(color="#94a3b8", size=9)),
+                    angularaxis=dict(gridcolor="#1e3a5f",
+                                    tickfont=dict(color="#e2e8f0", size=10)),
+                ),
+                paper_bgcolor="#1a2e4a", font_color="#e2e8f0",
+                margin=dict(t=40, b=20), height=320,
+                title=dict(text="Radar des signaux ML", font=dict(color="#c9a84c")),
+            )
+            st.plotly_chart(fig_radar, use_container_width=True)
+
+        with chart_col2:
+            signal_labels = ["Engagement<br>(25)", "Ratio<br>(15)", "Faux<br>(15)",
+                             "Bots<br>(10)", "Posts<br>(10)", "Profil<br>(10)",
+                             "Âge<br>(5)", "Produit<br>(10)"]
+            bar_colors = ["#22c55e" if v >= m * 0.7 else "#eab308" if v >= m * 0.4 else "#ef4444"
+                          for v, m in zip(vals, maxvals)]
+            fig_bar = go.Figure(go.Bar(
+                x=signal_labels, y=vals,
+                marker_color=bar_colors,
+                text=[f"{v:.1f}" for v in vals],
+                textposition="outside",
+            ))
+            fig_bar.update_layout(
+                paper_bgcolor="#1a2e4a", plot_bgcolor="#1a2e4a",
+                font_color="#e2e8f0",
+                yaxis=dict(gridcolor="#1e3a5f", title="Score obtenu"),
+                xaxis=dict(gridcolor="#1e3a5f"),
+                margin=dict(t=40, b=10), height=320,
+                title=dict(text="Détail des signaux", font=dict(color="#c9a84c")),
+            )
+            st.plotly_chart(fig_bar, use_container_width=True)
+
+        # ── Posts table ────────────────────────────────────────────────────
+        if posts:
+            st.markdown("#### 📋 Publications scrapées")
+            rows = []
+            for p in posts:
+                rows.append({
+                    "Date": p["date"][:10],
+                    "Likes": p["likes"],
+                    "Comments": p["comments"],
+                    "Views": p.get("video_view_count") or "—",
+                    "Type": "🎬 Vidéo" if p["is_video"] else "🖼️ Photo",
+                    "Sponsorisé": "🔴 OUI" if p["is_sponsored"] else "✅ Non",
+                    "URL": p["url"],
+                })
+            posts_df = pd.DataFrame(rows)
+
+            avg_likes = posts_df["Likes"].mean()
+            for _, post_row in posts_df.iterrows():
+                ratio = post_row["Likes"] / avg_likes if avg_likes > 0 else 1
+                flag_ad = " 📢" if post_row["Sponsorisé"] == "🔴 OUI" else ""
+                flag_viral = " 🔥" if ratio >= 2 else ""
+                color_post = "#c9a84c" if ratio >= 2 else "#1a2e4a"
+                st.markdown(f"""
+                <div style="background:{color_post}22;border:1px solid {color_post}44;
+                            border-radius:8px;padding:10px 14px;margin-bottom:6px;
+                            display:flex;align-items:center;gap:20px">
+                    <span style="color:#94a3b8;font-size:0.8rem;min-width:80px">{post_row['Date']}</span>
+                    <span style="color:#e2e8f0">{post_row['Type']}{flag_ad}{flag_viral}</span>
+                    <span style="color:#22c55e">❤️ {post_row['Likes']:,}</span>
+                    <span style="color:#60a5fa">💬 {post_row['Comments']}</span>
+                    <span style="color:#94a3b8">👁️ {post_row['Views']}</span>
+                    <span style="color:#94a3b8;font-size:0.75rem">{post_row['Sponsorisé']}</span>
+                    <a href="{post_row['URL']}" target="_blank"
+                       style="color:#c9a84c;font-size:0.75rem;margin-left:auto">→ Voir</a>
+                </div>""", unsafe_allow_html=True)
+
+        # ── Tracking curve ─────────────────────────────────────────────────
+        st.markdown("#### 📈 Courbe de tracking — Trust Score dans le temps")
+        history = history_get(uname)
+
+        if len(history) >= 2:
+            hist_df = pd.DataFrame(history)
+            hist_df["timestamp"] = pd.to_datetime(hist_df["timestamp"])
+            hist_df = hist_df.sort_values("timestamp")
+
+            fig_track = go.Figure()
+            fig_track.add_trace(go.Scatter(
+                x=hist_df["timestamp"],
+                y=hist_df["trust_score"],
+                mode="lines+markers+text",
+                name="Trust Score",
+                line=dict(color="#c9a84c", width=3),
+                marker=dict(size=10, color="#c9a84c",
+                            line=dict(color="#112240", width=2)),
+                text=hist_df["trust_score"].astype(str),
+                textposition="top center",
+                textfont=dict(color="#c9a84c", size=12),
+            ))
+            fig_track.add_hrect(y0=80, y1=100, fillcolor="#22c55e", opacity=0.07,
+                                annotation_text="Certifié", annotation_position="right",
+                                annotation_font_color="#22c55e")
+            fig_track.add_hrect(y0=50, y1=80, fillcolor="#eab308", opacity=0.07,
+                                annotation_text="À surveiller", annotation_position="right",
+                                annotation_font_color="#eab308")
+            fig_track.add_hrect(y0=0, y1=50, fillcolor="#ef4444", opacity=0.07,
+                                annotation_text="Suspect", annotation_position="right",
+                                annotation_font_color="#ef4444")
+            fig_track.update_layout(
+                paper_bgcolor="#1a2e4a", plot_bgcolor="#112240",
+                font_color="#e2e8f0",
+                xaxis=dict(title="Date", gridcolor="#1e3a5f"),
+                yaxis=dict(title="Trust Score", gridcolor="#1e3a5f",
+                           range=[0, 105]),
+                margin=dict(t=20, b=20, l=20, r=80),
+                height=300,
+                hovermode="x unified",
+            )
+            st.plotly_chart(fig_track, use_container_width=True)
+
+            # Followers trend as secondary chart
+            fig_fol = go.Figure()
+            fig_fol.add_trace(go.Scatter(
+                x=hist_df["timestamp"],
+                y=hist_df["followers"],
+                mode="lines+markers",
+                name="Followers",
+                line=dict(color="#1e88e5", width=2),
+                marker=dict(size=7, color="#1e88e5"),
+                fill="tozeroy",
+                fillcolor="rgba(30,136,229,0.08)",
+            ))
+            fig_fol.update_layout(
+                paper_bgcolor="#1a2e4a", plot_bgcolor="#112240",
+                font_color="#e2e8f0",
+                xaxis=dict(title="Date", gridcolor="#1e3a5f"),
+                yaxis=dict(title="Followers", gridcolor="#1e3a5f"),
+                margin=dict(t=10, b=20, l=20, r=20),
+                height=200,
+            )
+            st.plotly_chart(fig_fol, use_container_width=True)
+        else:
+            st.info(
+                f"Premier scraping de @{uname} enregistré ✓ — "
+                "Relancez le scraping plus tard pour voir l'évolution du Trust Score dans le temps."
+            )
+
+        # ── Save to CSV option ─────────────────────────────────────────────
+        st.markdown("<br>", unsafe_allow_html=True)
+        col_save1, col_save2 = st.columns([1, 3])
+        with col_save1:
+            if st.button("💾 Sauvegarder dans influencers.csv", use_container_width=True):
+                csv_path = os.path.join(os.path.dirname(__file__), "data", "influencers.csv") \
+                    if os.path.isfile(os.path.join(os.path.dirname(__file__), "data", "influencers.csv")) \
+                    else os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "influencers.csv")
+
+                existing = pd.read_csv(csv_path)
+                new_row = {k: inf.get(k, "") for k in existing.columns}
+                new_row["trust_score"] = trust_score
+                updated = pd.concat([existing, pd.DataFrame([new_row])], ignore_index=True)
+                updated.to_csv(csv_path, index=False)
+                st.success(f"@{uname} ajouté à influencers.csv ✓")
+                st.cache_data.clear()
+        with col_save2:
+            st.caption("Ajouter ce profil à la base de données pour le voir dans Découverte, Audit et Classement.")
