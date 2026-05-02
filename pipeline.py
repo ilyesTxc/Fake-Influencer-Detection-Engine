@@ -29,6 +29,8 @@ def run_pipeline(influencer: dict, product_description: str = "") -> InfluencerS
     initial_state: InfluencerState = {
         "influencer": influencer,
         "fake_probability": None,
+        "fake_follower_estimate": None,
+        "fake_follower_detail": None,
         "bot_score": None,
         "product_match_score": None,
         "trust_score": None,

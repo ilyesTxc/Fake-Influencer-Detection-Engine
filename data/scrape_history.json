@@ -36,6 +36,48 @@
       "followers": 691925,
       "engagement_rate": 10.32,
       "posts_count": 229
+    },
+    {
+      "timestamp": "2026-05-02T05:54:37.810962+00:00",
+      "trust_score": 89,
+      "followers": 691877,
+      "engagement_rate": 10.32,
+      "posts_count": 229
+    },
+    {
+      "timestamp": "2026-05-02T05:57:37.829524+00:00",
+      "trust_score": 89,
+      "followers": 691877,
+      "engagement_rate": 10.32,
+      "posts_count": 229
+    },
+    {
+      "timestamp": "2026-05-02T06:05:49.305887+00:00",
+      "trust_score": 89,
+      "followers": 691876,
+      "engagement_rate": 10.32,
+      "posts_count": 229
+    },
+    {
+      "timestamp": "2026-05-02T06:07:06.564536+00:00",
+      "trust_score": 89,
+      "followers": 691876,
+      "engagement_rate": 10.32,
+      "posts_count": 229
+    },
+    {
+      "timestamp": "2026-05-02T06:08:33.209263+00:00",
+      "trust_score": 89,
+      "followers": 691876,
+      "engagement_rate": 10.32,
+      "posts_count": 229
+    },
+    {
+      "timestamp": "2026-05-02T06:12:39.396272+00:00",
+      "trust_score": 89,
+      "followers": 691876,
+      "engagement_rate": 10.32,
+      "posts_count": 229
     }
   ],
   "foued_beji": [
@@ -161,6 +203,48 @@
       "followers": 1549825,
       "engagement_rate": 0.87,
       "posts_count": 346
+    },
+    {
+      "timestamp": "2026-05-02T02:25:38.737136+00:00",
+      "trust_score": 90,
+      "followers": 1549825,
+      "engagement_rate": 0.87,
+      "posts_count": 346
+    },
+    {
+      "timestamp": "2026-05-02T06:15:28.320047+00:00",
+      "trust_score": 87,
+      "followers": 1549767,
+      "engagement_rate": 0.87,
+      "posts_count": 346
+    },
+    {
+      "timestamp": "2026-05-02T06:16:35.095637+00:00",
+      "trust_score": 87,
+      "followers": 1549767,
+      "engagement_rate": 0.87,
+      "posts_count": 346
+    },
+    {
+      "timestamp": "2026-05-02T06:18:13.199716+00:00",
+      "trust_score": 87,
+      "followers": 1549767,
+      "engagement_rate": 0.87,
+      "posts_count": 346
+    },
+    {
+      "timestamp": "2026-05-02T06:18:24.227961+00:00",
+      "trust_score": 87,
+      "followers": 1549767,
+      "engagement_rate": 0.87,
+      "posts_count": 346
+    },
+    {
+      "timestamp": "2026-05-02T06:31:57.189023+00:00",
+      "trust_score": 82,
+      "followers": 1549764,
+      "engagement_rate": 0.87,
+      "posts_count": 346
     }
   ],
   "ibrahimaidii": [
@@ -182,6 +266,13 @@
       "timestamp": "2026-05-02T02:09:01.117848+00:00",
       "trust_score": 88,
       "followers": 612227,
+      "engagement_rate": 5.29,
+      "posts_count": 128
+    },
+    {
+      "timestamp": "2026-05-02T04:02:22.427299+00:00",
+      "trust_score": 87,
+      "followers": 612208,
       "engagement_rate": 5.29,
       "posts_count": 128
     }
@@ -207,6 +298,36 @@
       "followers": 357693,
       "engagement_rate": 0.01,
       "posts_count": 995
+    }
+  ],
+  "abderrahmen_21_": [
+    {
+      "timestamp": "2026-05-02T02:28:25.818412+00:00",
+      "trust_score": 86,
+      "followers": 8593,
+      "engagement_rate": 3.57,
+      "posts_count": 21
+    },
+    {
+      "timestamp": "2026-05-02T02:54:21.778534+00:00",
+      "trust_score": 86,
+      "followers": 8593,
+      "engagement_rate": 3.57,
+      "posts_count": 21
+    },
+    {
+      "timestamp": "2026-05-02T03:00:29.510320+00:00",
+      "trust_score": 86,
+      "followers": 8593,
+      "engagement_rate": 3.57,
+      "posts_count": 21
+    },
+    {
+      "timestamp": "2026-05-02T03:07:06.417796+00:00",
+      "trust_score": 86,
+      "followers": 8593,
+      "engagement_rate": 3.57,
+      "posts_count": 21
     }
   ]
 }

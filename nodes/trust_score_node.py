@@ -87,9 +87,11 @@ def trust_score_node(state: InfluencerState) -> InfluencerState:
     else:
         sig2 = 1.5
 
-    # Signal 3: Fake follower estimate from igaudit model (15 pts)
-    fake_prob = state.get("fake_probability", 0.2)
-    sig3 = (1.0 - fake_prob) * 15
+    # Signal 3: Fake follower estimate — combined ER-gap + IGAudit (15 pts)
+    fake_follower_est = state.get("fake_follower_estimate")
+    if fake_follower_est is None:
+        fake_follower_est = state.get("fake_probability", 0.2)
+    sig3 = (1.0 - float(fake_follower_est)) * 15
 
     # Signal 4: Bot detection score (10 pts)
     sig4 = (5.0 - bot_score) / 4.0 * 10
@@ -115,22 +117,10 @@ def trust_score_node(state: InfluencerState) -> InfluencerState:
         completeness += 3
     sig6 = float(completeness)
 
-    # Signal 7: Account age (5 pts)
-    if age_months >= 24:
-        sig7 = 5.0
-    elif age_months >= 12:
-        sig7 = 3.5
-    elif age_months >= 6:
-        sig7 = 2.0
-    elif age_months >= 3:
-        sig7 = 1.0
-    else:
-        sig7 = 0.0
-
-    # Signal 8: Product fit (10 pts)
+    # Signal 7: Product fit (10 pts)
     sig8 = product_match_score * 10
 
-    raw = sig1 + sig2 + sig3 + sig4 + sig5 + sig6 + sig7 + sig8
+    raw = sig1 + sig2 + sig3 + sig4 + sig5 + sig6 + sig8
 
     # ── Signal 9: Comment sentiment modifier ──────────────────────────────────
     # Only applied when we have real scraped comments.
@@ -165,7 +155,6 @@ def trust_score_node(state: InfluencerState) -> InfluencerState:
         "bot_detect":    round(sig4, 1),
         "consistency":   round(sig5, 1),
         "completeness":  round(sig6, 1),
-        "age":           round(sig7, 1),
         "product_match": round(sig8, 1),
         "sentiment":     sig9,           # None for mock data, float for scraped
     }
