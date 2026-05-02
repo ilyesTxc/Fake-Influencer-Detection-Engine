@@ -1,7 +1,7 @@
 # TrustInflu
 
 > **AI-powered influencer trust scoring for the Maghreb market.**
-> Help Tunisian brands vet influencers before they sign a deal — not after.
+> Help Tunisian brands vet influencers before they sign a deal  not after.
 
 ![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python&logoColor=white)
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.45-red?logo=streamlit&logoColor=white)
