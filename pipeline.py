@@ -36,6 +36,7 @@ def run_pipeline(influencer: dict, product_description: str = "") -> InfluencerS
         "score_breakdown": None,
         "recommendation": None,
         "product_description": product_description,
+        "comment_sentiment_score": None,
     }
     result = pipeline.invoke(initial_state)
     return result

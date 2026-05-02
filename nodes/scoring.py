@@ -16,6 +16,7 @@ def _initial_state(influencer: dict, product_description: str = "") -> Influence
         "score_breakdown": None,
         "recommendation": None,
         "product_description": product_description,
+        "comment_sentiment_score": None,
     }
 
 

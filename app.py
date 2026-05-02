@@ -637,7 +637,7 @@ elif page == "🔎 Scrape Instagram":
             (m3, "❤️ Engagement",   f"{inf['engagement_rate']}%"),
             (m4, "📸 Posts",        f"{inf['posts_count']:,}"),
             (m5, "🗓️ Âge compte",   f"{inf['account_age_months']} mois"),
-            (m6, "📢 Pubs sponsos", f"{inf.get('_ad_count', 0)}/{len(posts)}"),
+            (m6, "📢 Pubs sponsos", f"{inf.get('_ad_count', 0)}/{len(posts)} ({inf.get('_ad_ratio', 0):.0%})"),
         ]
         for col, title, val in metrics:
             col.markdown(f"""
@@ -651,14 +651,26 @@ elif page == "🔎 Scrape Instagram":
         st.markdown("<br>", unsafe_allow_html=True)
         chart_col1, chart_col2 = st.columns(2)
 
-        categories = ["Engagement","Ratio","Faux followers","Bots",
-                      "Consistance","Profil","Ancienneté","Fit produit"]
-        maxvals = [25, 15, 15, 10, 10, 10, 5, 10]
-        vals = [
-            breakdown["engagement"], breakdown["ratio"], breakdown["fake_detect"],
-            breakdown["bot_detect"], breakdown["consistency"], breakdown["completeness"],
-            breakdown["age"], breakdown["product_match"],
-        ]
+        _has_sentiment = breakdown.get("sentiment") is not None
+        if _has_sentiment:
+            categories = ["Engagement","Ratio","Faux followers","Bots",
+                          "Consistance","Profil","Ancienneté","Fit produit","Sentiment"]
+            maxvals = [25, 15, 15, 10, 10, 10, 5, 10, 5]
+            _sent_val = max(0.0, min(5.0, breakdown["sentiment"] + 2.5))  # shift -10..+5 → 0..5
+            vals = [
+                breakdown["engagement"], breakdown["ratio"], breakdown["fake_detect"],
+                breakdown["bot_detect"], breakdown["consistency"], breakdown["completeness"],
+                breakdown["age"], breakdown["product_match"], _sent_val,
+            ]
+        else:
+            categories = ["Engagement","Ratio","Faux followers","Bots",
+                          "Consistance","Profil","Ancienneté","Fit produit"]
+            maxvals = [25, 15, 15, 10, 10, 10, 5, 10]
+            vals = [
+                breakdown["engagement"], breakdown["ratio"], breakdown["fake_detect"],
+                breakdown["bot_detect"], breakdown["consistency"], breakdown["completeness"],
+                breakdown["age"], breakdown["product_match"],
+            ]
         pct = [round(v / m * 100) for v, m in zip(vals, maxvals)]
 
         with chart_col1:
@@ -686,9 +698,15 @@ elif page == "🔎 Scrape Instagram":
             st.plotly_chart(fig_radar, use_container_width=True)
 
         with chart_col2:
-            signal_labels = ["Engagement<br>(25)", "Ratio<br>(15)", "Faux<br>(15)",
-                             "Bots<br>(10)", "Posts<br>(10)", "Profil<br>(10)",
-                             "Âge<br>(5)", "Produit<br>(10)"]
+            signal_labels = (
+                ["Engagement<br>(25)", "Ratio<br>(15)", "Faux<br>(15)",
+                 "Bots<br>(10)", "Posts<br>(10)", "Profil<br>(10)",
+                 "Âge<br>(5)", "Produit<br>(10)", "Sentiment<br>(±)"]
+                if _has_sentiment else
+                ["Engagement<br>(25)", "Ratio<br>(15)", "Faux<br>(15)",
+                 "Bots<br>(10)", "Posts<br>(10)", "Profil<br>(10)",
+                 "Âge<br>(5)", "Produit<br>(10)"]
+            )
             bar_colors = ["#22c55e" if v >= m * 0.7 else "#eab308" if v >= m * 0.4 else "#ef4444"
                           for v, m in zip(vals, maxvals)]
             fig_bar = go.Figure(go.Bar(
@@ -707,41 +725,144 @@ elif page == "🔎 Scrape Instagram":
             )
             st.plotly_chart(fig_bar, use_container_width=True)
 
+        # ── FINAL VERDICT ─────────────────────────────────────────────────────
+        st.markdown("<br>", unsafe_allow_html=True)
+        if trust_score >= 80:
+            verdict_color = "#22c55e"
+            verdict_icon  = "✅"
+            verdict_title = "RECOMMANDÉ — Travaillez avec cet influenceur"
+            verdict_text  = (f"Score de confiance {trust_score}/100 · Profil authentique, "
+                             f"engagement solide et communauté saine. Idéal pour une campagne.")
+        elif trust_score >= 50:
+            verdict_color = "#eab308"
+            verdict_icon  = "⚠️"
+            verdict_title = "À ÉVALUER — Collaboration possible avec précautions"
+            verdict_text  = (f"Score de confiance {trust_score}/100 · Profil acceptable mais "
+                             f"certains signaux méritent attention. Négociez des KPIs clairs avant.")
+        else:
+            verdict_color = "#ef4444"
+            verdict_icon  = "❌"
+            verdict_title = "NON RECOMMANDÉ — Évitez cette collaboration"
+            verdict_text  = (f"Score de confiance {trust_score}/100 · Signaux d'alerte détectés "
+                             f"(faux followers, bots ou communauté toxique). Risque élevé pour votre marque.")
+
+        st.markdown(f"""<div style="background:linear-gradient(135deg,{verdict_color}18,{verdict_color}08);
+            border:2px solid {verdict_color};border-radius:14px;padding:20px 24px;margin-bottom:16px">
+            <div style="font-size:1.3rem;font-weight:800;color:{verdict_color}">{verdict_icon} {verdict_title}</div>
+            <div style="color:#cbd5e1;margin-top:6px;font-size:0.9rem">{verdict_text}</div>
+        </div>""", unsafe_allow_html=True)
+
+        # ── Comment sentiment panel ────────────────────────────────────────────
+        sent = inf.get("_comment_sentiment", {})
+        st.markdown("#### 💬 Analyse des commentaires")
+        if not sent or sent.get("total", 0) == 0:
+            scrape_errors = sent.get("scrape_errors", 0) if sent else 0
+            if scrape_errors > 0:
+                st.warning("⚠️ Les commentaires n'ont pas pu être chargés depuis Instagram (limite de taux ou accès restreint). Re-scrapez dans quelques minutes.")
+            else:
+                st.info("ℹ️ Aucun commentaire trouvé sur les posts analysés.")
+        if sent and sent.get("total", 0) > 0:
+            sc      = sent.get("sentiment_score", 0.5)
+            pos_r   = sent.get("positive_ratio", 0)
+            neu_r   = sent.get("neutral_ratio",  0)
+            neg_r   = sent.get("negative_ratio", 0)
+            ins_r   = sent.get("insult_ratio",   0)
+            total_c = sent.get("total", 0)
+            counts  = sent.get("counts", {})
+
+            # Label based on negative+insult presence — not on positive absence
+            if ins_r >= 0.15 or neg_r >= 0.35:
+                sent_color = "#ef4444"
+                sent_label = "🔴 Communauté toxique — risque image de marque"
+            elif ins_r >= 0.05 or neg_r >= 0.15:
+                sent_color = "#eab308"
+                sent_label = "🟡 Communauté mitigée — quelques commentaires négatifs"
+            else:
+                sent_color = "#22c55e"
+                sent_label = "🟢 Communauté saine — bon signal pour les marques"
+
+            # Health score bar
+            sc_pct = int(sc * 100)
+            st.markdown(f"""<div style="background:#1a2e4a;border-radius:12px;padding:16px;margin-bottom:12px;border:1px solid {sent_color}44">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                    <span style="color:{sent_color};font-weight:700;font-size:1rem">{sent_label}</span>
+                    <span style="color:{sent_color};font-size:1.4rem;font-weight:800">{sc_pct}%</span>
+                </div>
+                <div style="background:#0a1628;border-radius:4px;height:8px">
+                    <div style="background:{sent_color};width:{sc_pct}%;height:8px;border-radius:4px"></div>
+                </div>
+                <div style="color:#64748b;font-size:0.75rem;margin-top:6px">Score de santé communautaire — analysé sur {total_c} commentaires</div>
+            </div>""", unsafe_allow_html=True)
+
+            # 4 cards that sum to 100%
+            sc1, sc2, sc3, sc4 = st.columns(4)
+            for col, val, label, color in [
+                (sc1, f"{pos_r:.0%}", "😊 Positifs",    "#22c55e"),
+                (sc2, f"{neu_r:.0%}", "😐 Neutres",      "#94a3b8"),
+                (sc3, f"{neg_r:.0%}", "😠 Négatifs",    "#ef4444"),
+                (sc4, f"{ins_r:.0%}", "🤬 Insultants",  "#7f1d1d"),
+            ]:
+                col.markdown(f"""<div style="background:#1a2e4a;border-radius:10px;padding:12px;text-align:center;border:1px solid {color}44">
+                    <div style="font-size:1.4rem;font-weight:800;color:{color}">{val}</div>
+                    <div style="color:#94a3b8;font-size:0.75rem;margin-top:2px">{label} · {counts.get(label.split()[1].lower().rstrip('s').replace('insultant','insult').replace('neutre','neutral').replace('positif','positive').replace('négatif','negative'), 0)}</div>
+                </div>""", unsafe_allow_html=True)
+
+            col_pos, col_neg = st.columns(2)
+            with col_pos:
+                samples_pos = [s for s in sent.get("sample_positive", []) if len(s.strip()) > 2]
+                if samples_pos:
+                    st.markdown("**Exemples positifs**")
+                    for s in samples_pos:
+                        st.markdown(f'<div style="background:#14532d33;border-left:3px solid #22c55e;padding:8px 12px;border-radius:6px;margin-bottom:6px;color:#e2e8f0;font-size:0.85rem">{s}</div>', unsafe_allow_html=True)
+            with col_neg:
+                samples_neg = sent.get("sample_negative", [])
+                if samples_neg:
+                    st.markdown("**Exemples négatifs / insultants**")
+                    for s in samples_neg:
+                        st.markdown(f'<div style="background:#7f1d1d33;border-left:3px solid #ef4444;padding:8px 12px;border-radius:6px;margin-bottom:6px;color:#e2e8f0;font-size:0.85rem">{s}</div>', unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
         # ── Posts table ────────────────────────────────────────────────────
         if posts:
             st.markdown("#### 📋 Publications scrapées")
-            rows = []
-            for p in posts:
-                rows.append({
-                    "Date": p["date"][:10],
-                    "Likes": p["likes"],
-                    "Comments": p["comments"],
-                    "Views": p.get("video_view_count") or "—",
-                    "Type": "🎬 Vidéo" if p["is_video"] else "🖼️ Photo",
-                    "Sponsorisé": "🔴 OUI" if p["is_sponsored"] else "✅ Non",
-                    "URL": p["url"],
-                })
-            posts_df = pd.DataFrame(rows)
 
-            avg_likes = posts_df["Likes"].mean()
-            for _, post_row in posts_df.iterrows():
-                ratio = post_row["Likes"] / avg_likes if avg_likes > 0 else 1
-                flag_ad = " 📢" if post_row["Sponsorisé"] == "🔴 OUI" else ""
+            avg_likes = sum(p["likes"] for p in posts) / max(len(posts), 1)
+            for p in posts:
+                ratio      = p["likes"] / avg_likes if avg_likes > 0 else 1
+                is_ad      = p.get("is_sponsored", False)
+                ad_tags    = p.get("ad_tags", [])
                 flag_viral = " 🔥" if ratio >= 2 else ""
-                color_post = "#c9a84c" if ratio >= 2 else "#1a2e4a"
-                st.markdown(f"""
-                <div style="background:{color_post}22;border:1px solid {color_post}44;
-                            border-radius:8px;padding:10px 14px;margin-bottom:6px;
-                            display:flex;align-items:center;gap:20px">
-                    <span style="color:#94a3b8;font-size:0.8rem;min-width:80px">{post_row['Date']}</span>
-                    <span style="color:#e2e8f0">{post_row['Type']}{flag_ad}{flag_viral}</span>
-                    <span style="color:#22c55e">❤️ {post_row['Likes']:,}</span>
-                    <span style="color:#60a5fa">💬 {post_row['Comments']}</span>
-                    <span style="color:#94a3b8">👁️ {post_row['Views']}</span>
-                    <span style="color:#94a3b8;font-size:0.75rem">{post_row['Sponsorisé']}</span>
-                    <a href="{post_row['URL']}" target="_blank"
-                       style="color:#c9a84c;font-size:0.75rem;margin-left:auto">→ Voir</a>
-                </div>""", unsafe_allow_html=True)
+                ad_label   = "🔴 PUB" if is_ad else "✅ Organique"
+                ad_color   = "#ef4444" if is_ad else "#22c55e"
+                post_bg    = "#c9a84c" if ratio >= 2 else "#1a2e4a"
+                views_val  = p.get("video_view_count") or "—"
+                post_type  = "🎬 Vidéo" if p["is_video"] else "🖼️ Photo"
+
+                tags_html = ""
+                if ad_tags and ad_tags != ["[instagram_native]"]:
+                    tags_str = " ".join(ad_tags[:4])
+                    tags_html = f'<span style="background:#ef444422;color:#ef4444;font-size:0.65rem;padding:2px 6px;border-radius:8px;margin-left:6px">{tags_str}</span>'
+                elif ad_tags == ["[instagram_native]"]:
+                    tags_html = '<span style="background:#ef444422;color:#ef4444;font-size:0.65rem;padding:2px 6px;border-radius:8px;margin-left:6px">Instagram Branded Content</span>'
+
+                # Single-line <a> tag avoids Streamlit markdown parser breaking the HTML
+                link_html = f'<a href="{p["url"]}" target="_blank" style="color:#c9a84c;font-size:0.75rem;margin-left:auto;text-decoration:none">→ Voir</a>'
+
+                st.markdown(
+                    f'<div style="background:{post_bg}22;border:1px solid {post_bg}44;border-radius:8px;padding:10px 14px;margin-bottom:6px">'
+                    f'<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">'
+                    f'<span style="color:#94a3b8;font-size:0.8rem;min-width:78px">{p["date"][:10]}</span>'
+                    f'<span style="color:#e2e8f0">{post_type}{flag_viral}</span>'
+                    f'<span style="color:#22c55e">❤️ {p["likes"]:,}</span>'
+                    f'<span style="color:#60a5fa">💬 {p["comments"]}</span>'
+                    f'<span style="color:#94a3b8">👁️ {views_val}</span>'
+                    f'<span style="color:{ad_color};font-weight:600;font-size:0.8rem">{ad_label}</span>'
+                    f'{tags_html}'
+                    f'{link_html}'
+                    f'</div></div>',
+                    unsafe_allow_html=True,
+                )
 
         # ── Tracking curve ─────────────────────────────────────────────────
         st.markdown("#### 📈 Courbe de tracking — Trust Score dans le temps")

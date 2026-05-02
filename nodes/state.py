@@ -1,5 +1,6 @@
 from typing import TypedDict, Optional
 
+
 class InfluencerState(TypedDict):
     influencer: dict
     fake_probability: Optional[float]
@@ -10,3 +11,4 @@ class InfluencerState(TypedDict):
     score_breakdown: Optional[dict]
     recommendation: Optional[str]
     product_description: Optional[str]
+    comment_sentiment_score: Optional[float]   # 0.0-1.0, from scraped comments
