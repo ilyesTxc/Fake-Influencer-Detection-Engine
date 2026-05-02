@@ -174,68 +174,128 @@ def detect_niche(bio: str, captions: list) -> str:
 
 
 # ── Caption-level ad patterns (no hashtag needed) ────────────────────────────
-# Compiled once at import time for performance.
 _AD_CAPTION_PATTERNS = re.compile(
     r"""
-    # Brand collab notation  — "hoodies x aid", "Nour × brand"
-    \b\w[\w\s]*\s+[xX×]\s+\w+
-    # English commercial signals
+    # ── Brand collab "X" notation ─────────────────────────────────────────────
+    # "hoodies x aid", "Nour × brand", "collection x store"
+    \b\w[\w]*\s+[xX×]\s+\w+
+
+    # ── English commercial signals ─────────────────────────────────────────────
     | link\s+in\s+(my\s+)?bio
+    | check\s+(my\s+)?bio
+    | bio\s+link
     | swipe\s+up
-    | use\s+(my\s+)?code
-    | use\s+(my\s+)?link
+    | use\s+(my\s+)?code\b
+    | use\s+(my\s+)?link\b
     | available\s+(now|online|at|on|in)
-    | shop\s+(now|here|link|my)
+    | shop\s+(now|here|link|my|at)
+    | order\s+(now|here|via|from)
+    | get\s+(yours|it\s+now|yours\s+now)
     | \bcollab\b
     | \bpartnership\b
     | \bsponsored\b
     | \baffiliate\b
     | discount\s+code
     | promo\s+code
-    | \d+%\s+off
-    # French commercial signals
+    | coupon\s+code
+    | \d+\s*%\s+off
+    | free\s+shipping
+    | limited\s+(time|offer|stock|edition)
+    | dm\s+(me\s+)?(to\s+)?(order|buy|get|for)
+    | message\s+(me\s+)?(to\s+)?(order|buy|get|for)
+    | whatsapp\s+(me|us|to\s+order)
+
+    # ── French commercial signals ──────────────────────────────────────────────
     | lien\s+en\s+bio
-    | lien\s+dans\s+(la\s+)?bio
+    | lien\s+dans\s+(ma\s+|la\s+)?bio
+    | voir\s+(ma\s+)?bio
     | code\s+promo
-    | code\s+r[eé]duc
-    | r[eé]duction
+    | code\s+r[eé]duc(tion)?
+    | r[eé]duction\s+de\s+\d+
+    | \d+\s*%\s+de\s+r[eé]duc
     | disponible\s+(sur|en|au|dans|chez)
-    | commandez?\s+(sur|ici|maintenant)
-    | achetez?\s+(sur|ici|maintenant)
+    | commandez?\s+(sur|ici|maintenant|via|au)
+    | achetez?\s+(sur|ici|maintenant|via|au)
+    | livraison\s+(gratuite|offerte|rapide|partout)
+    | livr[eé]\s+(partout|en\s+tunisie|au\s+maroc)
     | \bcollab\b
     | \bpartenariat\b
     | \bcollaboration\b
     | offert\s+par
-    | en\s+partenariat
-    # Arabic / Tunisian commercial signals
-    | لينك\s+في\s+البيو
+    | en\s+partenariat\s+avec
+    | en\s+collaboration\s+avec
+    | contactez[- ]nous
+    | contacte[- ](moi|nous)
+    | envoyez?\s+(un\s+)?message
+    | whatsapp\s*:\s*\+?\d
+    | num[eé]ro\s+(whatsapp|de\s+contact)
+    | stock\s+limit[eé]
+    | derni[eè]res?\s+pi[eè]ces?
+
+    # ── Tunisian / Maghreb dialect signals ────────────────────────────────────
+    | wa\.me\/
+    | whatsapp\.com\/
+    | lien\s+bio
+    | bio\s+fi\s+link
+    | في\s+البيو
+    | في\s+البايو
+    | رابط\s+في\s+البيو
     | الرابط\s+في\s+البيو
-    | متوفر\s+(الآن|على|في)
-    | اطلب\s+(الآن|من|عبر)
-    | كود\s+خصم
+    | لينك\s+في\s+البيو
+    | متوفر\s*(الآن|عندنا|لدينا|على|في)?
+    | اطلب\s*(الآن|من|عبر|هنا)?
+    | كود\s*خصم
     | بكود
     | كوبون
-    | تسوق\s+الآن
-    | رابط\s+في\s+البيو
+    | تسوق\s*الآن
+    | تواصل\s*معنا
+    | تواصلوا\s*معنا
+    | ارسل\s*(رسالة|واتساب|ماساج)
+    | واتساب\s*:\s*\+?\d
+    | للطلب\s*(واتساب|هنا|كلمنا|تواصل)
+    | للاستفسار
+    | مش\s+هتلاقي\s+أحسن    # "you won't find better"
+    | توصيل\s*(مجاني|لكل|لجميع)
+    | متاح\s*(الآن|للطلب|على)
+    | اسعار\s*خاصة
+    | عروض\s*خاصة
+    | عرض\s*محدود
+
+    # ── Price / currency patterns (product being sold) ────────────────────────
+    | \d+\s*(dt|dinar|tnd|mad|dzd|€|euro|dollars?)
+    | prix\s*:\s*\d
+    | price\s*:\s*\d
+    | سعر\s*:\s*\d
+    | ثمن\s*:\s*\d
     """,
     re.VERBOSE | re.IGNORECASE,
 )
 
-# Brand-like account name patterns (applied to @mentions and coauthor usernames)
+# ── Brand-like account patterns ───────────────────────────────────────────────
+# Applied to @mentions in caption, tagged-in-photo users, and collab co-authors.
 _BRAND_ACCOUNT_RE = re.compile(
     r"""
-    \.tn$ | \.ma$ | \.dz$ | \.com$ | \.shop$ | \.store$
-    | store | shop  | boutique | brand | brands
-    | official | off | offical          # common typo
-    | tunisie | maroc | algerie | maghreb
-    | collection | collections
-    | fashion | beauty | cosmet
-    | clothing | clothes | wear | apparel
-    | food | resto | cafe | coffee
-    | tech | digital | agency | agence
-    | group | grp | holding | company
-    | market | mall | center | centre
-    | predator | new_chic | beoutq        # known Tunisian brands
+    # TLD-style endings
+    \.tn | \.ma | \.dz | \.com | \.shop | \.store | \.fr | \.net
+
+    # Commerce words anywhere in the handle
+    | store | shop | boutique | market | mall | center | centre
+    | brand | brands | label
+    | official | officia | offcial          # typos included
+    | collection | collections | collab
+    | fashion | mode | style | wear | apparel | clothing | clothes | outfit
+    | beauty | beaute | cosmet | makeup | skincare | parfum | fragrance
+    | food | resto | restaurant | cafe | coffee | patisserie | boulangerie
+    | tech | digital | agency | agence | media | studio | creative
+    | group | grp | holding | company | corp | enterprise | sarl | suarl
+    | tunisie | tunisia | tunis | maroc | algerie | maghreb | sfax | sousse | nabeul
+    | trading | import | export | wholesale | grossiste | distribution
+
+    # Known Tunisian / Maghreb brands and patterns
+    | predator | new_chic | aurea | beoutq | ooredoo | topnet | ttelecom
+    | monoprix | geant | carrefour | poulina | delice | vitalait | syphax
+    | ennakl | artes | utic | stb | biat | attijari | zitouna
+    | jumia | glovo | hellocoins | flouci
     """,
     re.VERBOSE | re.IGNORECASE,
 )
@@ -256,46 +316,66 @@ def _is_brand_account(username: str) -> bool:
     return bool(_BRAND_ACCOUNT_RE.search(username))
 
 
-def _is_ad_post(caption: str, is_sponsored: bool, coauthors: list = None) -> tuple:
+def _is_ad_post(
+    caption: str,
+    is_sponsored: bool,
+    coauthors: list = None,
+    tagged_users: list = None,
+) -> tuple:
     """
     Returns (is_ad: bool, reasons: list[str]).
 
-    5-layer detection:
+    6-layer detection:
       1. Instagram native branded-content / is_sponsored flag
-      2. Instagram Collab feature — post has a co-author that looks like a brand
+      2. Instagram Collab co-author that looks like a brand (@store.new_chic)
       3. Hashtag exact match against AD_HASHTAGS
-      4. Hashtag substring match (e.g. #pepsi_ad, #nike_sponsored)
-      5. Caption text patterns — collab notation, commercial phrases, brand @mentions
+      4. Hashtag substring match  (#pepsi_ad, #nike_sponsored)
+      5. Caption text patterns    (collab "x" notation, commercial phrases,
+                                   WhatsApp links, prices, Arabic CTA phrases,
+                                   brand @mentions inside caption)
+      6. Photo-tagged users       (brand tagged IN the image, not in caption)
     """
     reasons = []
     caption = caption or ""
+    seen = set()   # deduplicate reason strings
 
-    # Layer 1 — Instagram native flag
+    def _add(r):
+        if r not in seen:
+            seen.add(r)
+            reasons.append(r)
+
+    # Layer 1 — Instagram native branded-content flag
     if is_sponsored:
-        reasons.append("[Instagram Branded Content]")
+        _add("[Instagram Branded Content]")
 
-    # Layer 2 — Instagram Collab co-author is a brand
+    # Layer 2 — Instagram Collab co-author
     for coauthor in (coauthors or []):
-        uname = (coauthor.get("username") or coauthor if isinstance(coauthor, str) else "").lower()
+        uname = (coauthor.get("username") or "").lower().strip()
         if uname and _is_brand_account(uname):
-            reasons.append(f"[Collab: @{uname}]")
+            _add(f"[Collab: @{uname}]")
 
-    # Layer 3 & 4 — Hashtag detection
+    # Layer 3 & 4 — Hashtag detection (exact + substring)
     for tag in _extract_hashtags(caption):
         if tag in AD_HASHTAGS:
-            reasons.append(f"#{tag}")
+            _add(f"#{tag}")
         elif any(sub in tag for sub in _AD_SUBSTRINGS):
-            reasons.append(f"#{tag}")
+            _add(f"#{tag}")
 
-    # Layer 5a — Caption text patterns (phrases, collab notation)
-    cap_match = _AD_CAPTION_PATTERNS.search(caption)
-    if cap_match:
-        reasons.append(f'[caption: "{cap_match.group(0).strip()[:40]}"]')
+    # Layer 5a — Caption commercial phrases
+    for match in _AD_CAPTION_PATTERNS.finditer(caption):
+        snippet = match.group(0).strip()[:45]
+        _add(f'["{snippet}"]')
 
-    # Layer 5b — @mentions of brand-like accounts in caption
+    # Layer 5b — @mentions of brand-like accounts inside caption text
     for mention in _extract_mentions(caption):
-        if _is_brand_account(mention) and f"[Collab: @{mention}]" not in reasons:
-            reasons.append(f"[@{mention}]")
+        if _is_brand_account(mention):
+            _add(f"[@{mention}]")
+
+    # Layer 6 — Users tagged IN the photo/video (not in caption)
+    for uname in (tagged_users or []):
+        uname = uname.lower().strip()
+        if uname and _is_brand_account(uname):
+            _add(f"[tagged in photo: @{uname}]")
 
     return bool(reasons), reasons
 
@@ -396,7 +476,7 @@ def scrape_profile(username: str) -> dict:
 
         caption = post.caption or ""
 
-        # Extract Instagram Collab co-authors from raw post metadata
+        # Layer 2: Instagram Collab co-authors (the "et @brand" in the UI)
         coauthors = []
         try:
             raw_coauthors = post._node.get("coauthor_producers") or []
@@ -404,7 +484,14 @@ def scrape_profile(username: str) -> dict:
         except Exception:
             pass
 
-        is_ad, ad_tags = _is_ad_post(caption, post.is_sponsored, coauthors)
+        # Layer 6: users tagged IN the photo/video
+        tagged_users = []
+        try:
+            tagged_users = list(post.tagged_users)
+        except Exception:
+            pass
+
+        is_ad, ad_tags = _is_ad_post(caption, post.is_sponsored, coauthors, tagged_users)
         if is_ad:
             ad_count += 1
 
