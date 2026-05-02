@@ -2,12 +2,29 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
-import sys, os
+import sys, os, base64, urllib.request
 from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.dirname(__file__))
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 from nodes.scoring import score_influencer
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def avatar_b64(url: str) -> str:
+    """Fetch a remote image and return it as a base64 data URI.
+    Bypasses Streamlit's CSP sandbox that blocks external <img> tags."""
+    if not url or not str(url).startswith("http"):
+        return ""
+    try:
+        req = urllib.request.Request(
+            url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        )
+        with urllib.request.urlopen(req, timeout=5) as r:
+            data = base64.b64encode(r.read()).decode()
+            ct = r.info().get_content_type() or "image/jpeg"
+        return f"data:{ct};base64,{data}"
+    except Exception:
+        return ""
 
 st.set_page_config(
     page_title="TrustInflu",
@@ -75,7 +92,7 @@ def render_influencer_card(row):
         <div class="inf-card tier-{tier}">
             <div class="inf-header">
                 <div class="inf-avatar">
-                    <img src="{row.profile_pic_url}" width="56" height="56" style="border-radius:50%">
+                    <img src="{avatar_b64(row.profile_pic_url)}" width="56" height="56" style="border-radius:50%">
                     <span class="inf-platform">{icon}</span>
                 </div>
                 <div>
@@ -111,7 +128,6 @@ def render_page_header(page_name):
 # ── Sidebar ──────────────────────────────────────────────────────────────────
 nav_items = [
     ("accueil",    "Accueil"),
-    ("decouverte", "Découverte"),
     ("audit",      "Audit"),
     ("brand",      "Brand Match"),
     ("classement", "Classement"),
@@ -197,54 +213,6 @@ if current_slug == "accueil":
         )
 
 # ══════════════════════════════════════════════════════════════════════════════
-# PAGE 2 — DÉCOUVERTE
-# ══════════════════════════════════════════════════════════════════════════════
-elif current_slug == "decouverte":
-    render_page_header("Découverte")
-    st.markdown("### 🔍 Découverte des influenceurs")
-
-    st.markdown("<div class=\"ti-filter-bar\">", unsafe_allow_html=True)
-    col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
-    with col1:
-        niches = ["Toutes"] + sorted(df["niche"].unique().tolist())
-        niche_filter = st.selectbox("Niche", niches)
-    with col2:
-        regions = ["Toutes"] + sorted(df["city"].unique().tolist())
-        region_filter = st.selectbox("Région / Ville", regions)
-    with col3:
-        platforms = ["Toutes"] + sorted(df["platform"].unique().tolist())
-        platform_filter = st.selectbox("Plateforme", platforms)
-    with col4:
-        min_score = st.slider("Trust Score minimum", 0, 100, 0, 5)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    filtered = df.copy()
-    if niche_filter != "Toutes":
-        filtered = filtered[filtered["niche"] == niche_filter]
-    if region_filter != "Toutes":
-        filtered = filtered[filtered["city"] == region_filter]
-    if platform_filter != "Toutes":
-        filtered = filtered[filtered["platform"] == platform_filter]
-    filtered = filtered[filtered["trust_score"] >= min_score]
-    filtered = filtered.sort_values("trust_score", ascending=False)
-
-    st.markdown(
-        f"<div class=\"count-pill\">{len(filtered)} influenceur(s) trouvé(s)</div>",
-        unsafe_allow_html=True,
-    )
-
-    cols = st.columns(2)
-    for i, (_, row) in enumerate(filtered.iterrows()):
-        with cols[i % 2]:
-            render_influencer_card(row)
-            st.markdown('<div class="inf-audit-btn">', unsafe_allow_html=True)
-            if st.button("Voir l'audit →", key=f"audit_{row['id']}", type="secondary"):
-                st.session_state["audit_id"] = row["id"]
-                st.session_state["page_slug"] = "audit"
-                st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
-
-# ══════════════════════════════════════════════════════════════════════════════
 # PAGE 3 — AUDIT
 # ══════════════════════════════════════════════════════════════════════════════
 elif current_slug == "audit":
@@ -288,7 +256,7 @@ elif current_slug == "audit":
                     text-transform:uppercase;letter-spacing:0.1em;margin-bottom:10px">
                     Profil Influenceur
                 </div>
-                <img src="{row.profile_pic_url}" class="profile-avatar" style="width:80px;height:80px">
+                <img src="{avatar_b64(row.profile_pic_url)}" class="profile-avatar" style="width:80px;height:80px">
                 <div class="inf-name" style="margin-top:8px">{row['name']} {flag}</div>
                 <div class="inf-meta">{icon} {row.platform} · {row.city}</div>
                 <span class="brand-sector-pill" style="margin-top:6px;display:inline-block">{row.niche}</span>
@@ -492,7 +460,7 @@ elif current_slug == "audit":
     with b2:
         st.markdown('<div class="stat-panel">', unsafe_allow_html=True)
         st.markdown('<div class="stat-panel-title">Radar des Signaux</div>', unsafe_allow_html=True)
-        categories_r = ["Engage", "Ratio", "Faux", "Bots", "Posts", "Profil", "Âge", "Produit"]
+        categories_r = ["Engage", "Ratio", "Faux", "Bots", "Posts", "Profil", "Produit"]
         maxvals_r    = [25, 15, 15, 10, 10, 10, 10]
         vals_r       = [breakdown["engagement"], breakdown["ratio"], breakdown["fake_detect"],
                         breakdown["bot_detect"], breakdown["consistency"], breakdown["completeness"],
@@ -580,17 +548,16 @@ elif current_slug == "audit":
         st.caption("Exécute le pipeline LangGraph (5 nœuds) et génère une recommandation Claude AI")
 
     if run_ai:
-        with st.spinner("Pipeline en cours d'exécution…"):
-            ai_state = {**result, "product_description": product_desc}
-            from nodes.report_node import report_node as _report_node
-            ai_result = _report_node(ai_state)
+        with st.spinner("Pipeline LangGraph en cours d'exécution…"):
+            from pipeline import run_pipeline
+            ai_result = run_pipeline(inf, product_desc)
             st.session_state["_ai_recommendation"] = ai_result.get("recommendation", "")
             st.session_state["_ai_pipeline_done"] = True
 
     if st.session_state.get("_ai_pipeline_done"):
         pipeline_steps = [
             ("🔍", "Analyse Profil", "igaudit_clf"),
-            ("🤖", "Détection Bots", "twitterclf / tiktokclf"),
+            ("🤖", "Détection Bots", "instagram-botclf"),
             ("📝", "Conformité Posts", "postclf"),
             ("📊", "Score composite", "8 signaux ML"),
             ("✨", "Rapport Claude", "claude-haiku-4-5"),
@@ -672,7 +639,7 @@ elif current_slug == "brand":
             <div class="match-card" style="border-left:4px solid {color}">
                 <div style="display:flex;align-items:center;gap:12px">
                     <div style="font-size:1.4rem">{medal}</div>
-                    <img src="{row.profile_pic_url}" style="width:44px;height:44px;border-radius:50%;border:2px solid {color}">
+                    <img src="{avatar_b64(row.profile_pic_url)}" style="width:44px;height:44px;border-radius:50%;border:2px solid {color}">
                     <div style="flex:1">
                         <div style="font-weight:700;color:var(--text-primary)">{row['name']} {flag}</div>
                         <div style="color:var(--text-muted);font-size:0.8rem">{icon} {row.platform} · {row.city} · {row.niche}</div>
@@ -714,7 +681,7 @@ elif current_slug == "classement":
         <div class="rank-card {rank_class}">
             <div style="display:flex;align-items:center;gap:14px">
                 <div class="rank-number">{medals[i]}</div>
-                <img src="{row.profile_pic_url}" style="width:46px;height:46px;border-radius:50%;border:2px solid {color}">
+                <img src="{avatar_b64(row.profile_pic_url)}" style="width:46px;height:46px;border-radius:50%;border:2px solid {color}">
                 <div style="flex:1">
                     <div style="font-weight:700;color:var(--text-primary)">{row['name']} {flag}</div>
                     <div style="color:var(--text-muted);font-size:0.8rem">{icon} {row.platform} · {row.city} · {row.niche}</div>
@@ -855,7 +822,8 @@ elif current_slug == "ig":
         with col_pic:
             pic_url = inf.get("profile_pic_url", "")
             if pic_url:
-                st.image(pic_url, width=100)
+                b64 = avatar_b64(pic_url)
+                st.image(b64 if b64 else pic_url, width=100)
             else:
                 st.markdown("👤", unsafe_allow_html=True)
 
@@ -1291,4 +1259,4 @@ elif current_slug == "ig":
                 st.success(f"@{uname} ajouté à influencers.csv ✓")
                 st.cache_data.clear()
         with col_save2:
-            st.caption("Ajouter ce profil à la base de données pour le voir dans Découverte, Audit et Classement.")
+            st.caption("Ajouter ce profil à la base de données pour le voir dans Audit et Classement.")

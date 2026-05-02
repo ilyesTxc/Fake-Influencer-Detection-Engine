@@ -7,7 +7,7 @@ from pathlib import Path
 import instaloader
 
 SESSION_USER = "chellyoussama35"
-SESSION_FILE = str(Path(__file__).parent.parent.parent / "instagram_session")
+SESSION_FILE = str(Path(__file__).parent.parent / "instagram_session")
 
 # ── Niche detection ───────────────────────────────────────────────────────────
 NICHE_KEYWORDS = {
@@ -457,7 +457,37 @@ def scrape_profile(username: str) -> dict:
         download_comments=True,   # must be True for get_comments() to work
         save_metadata=False,
     )
-    L.load_session_from_file(SESSION_USER, SESSION_FILE)
+    # Load session — try instaloader format first, fall back to cookies JSON
+    _cookies_json = SESSION_FILE + "_cookies.json"
+    if os.path.exists(SESSION_FILE):
+        L.load_session_from_file(SESSION_USER, SESSION_FILE)
+    elif os.path.exists(_cookies_json):
+        import json as _json
+        _raw = _json.load(open(_cookies_json))
+        # Inject cookies directly into the existing instaloader session
+        _cookie_dict = {
+            c["name"]: c["value"]
+            for c in _raw
+            if "instagram.com" in c.get("domain", "")
+        }
+        L.context._session.cookies.update(_cookie_dict)
+        # Set required headers instaloader expects
+        _csrf = _cookie_dict.get("csrftoken", "")
+        L.context._session.headers.update({
+            "x-csrftoken": _csrf,
+            "x-ig-app-id": "936619743392459",
+            "x-requested-with": "XMLHttpRequest",
+        })
+        L.context.username = SESSION_USER
+    else:
+        raise FileNotFoundError("No Instagram session found. Run login_instagram.py first.")
+
+    # Verify the session is actually authenticated
+    logged_in_user = L.test_login()
+    if not logged_in_user:
+        raise ConnectionError(
+            "Session expirée ou invalide. Relancez login_instagram.py pour reconnecter le compte."
+        )
 
     profile = instaloader.Profile.from_username(L.context, username)
 
@@ -470,7 +500,12 @@ def scrape_profile(username: str) -> dict:
     sample_positive   = []
     sample_negative   = []
 
-    for i, post in enumerate(profile.get_posts()):
+    try:
+      post_iter = profile.get_posts()
+    except (KeyError, TypeError) as e:
+      raise RuntimeError(f"Impossible de charger les posts ({e}). Le compte est peut-être privé ou Instagram a limité l'accès.") from e
+
+    for i, post in enumerate(post_iter):
         if i >= 20:
             break
 
@@ -513,8 +548,10 @@ def scrape_profile(username: str) -> dict:
                         elif label in ("negative", "insult") and len(sample_negative) < 5:
                             sample_negative.append(ctext[:150])
                     time.sleep(0.15)
+            except (KeyError, TypeError, StopIteration):
+                # Instagram returned unexpected structure (rate limit or private)
+                pass
             except Exception as e:
-                # Store the error so the UI can explain it
                 all_comments.append(f"__error__{e}")
 
         raw_posts.append({

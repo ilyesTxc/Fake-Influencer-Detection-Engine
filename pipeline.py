@@ -43,7 +43,3 @@ def run_pipeline(influencer: dict, product_description: str = "") -> InfluencerS
     result = pipeline.invoke(initial_state)
     return result
 
-def run_batch(influencers: list, product_description: str = "") -> list:
-    from nodes.ranking_node import rank_influencers
-    results = [run_pipeline(inf, product_description) for inf in influencers]
-    return rank_influencers(results)

@@ -1,8 +1,24 @@
+# Environment
 .env
+
+# Virtual environment
 venv/
+.venv/
+
+# Python cache
 __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
 .ipynb_checkpoints/
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Instagram session files (contain auth credentials — never commit)
+instagram_session
+instagram_session_cookies.json
+
+# Runtime-generated data
+data/scrape_history.json
