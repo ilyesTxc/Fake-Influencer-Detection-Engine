@@ -343,21 +343,23 @@ elif current_slug == "audit":
         )
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # 3 key metric cards (matches reference: Fake Follower, Bot Activity, Content Quality)
-        ff_pct   = round((1 - breakdown["fake_detect"] / 15) * 100) if breakdown["fake_detect"] else 0
-        bot_pct  = round((1 - breakdown["bot_detect"] / 10) * 100) if breakdown["bot_detect"] else 0
-        cq_pct   = round(breakdown["consistency"] / 10 * 100)
-        eng_pct  = round(breakdown["engagement"] / 25 * 100)
+        # 5 key metric cards
+        ff_pct       = round((1 - breakdown["fake_detect"] / 10) * 100) if breakdown["fake_detect"] else 0
+        bot_pct      = round((1 - breakdown["bot_detect"] / 10) * 100) if breakdown["bot_detect"] else 0
+        cq_pct       = round(breakdown["consistency"] / 10 * 100)
+        eng_pct      = round(breakdown["engagement"] / 25 * 100)
+        igaudit_pct  = round(breakdown["igaudit"] / 10 * 100)
 
         def _bar_color(pct):
             return "#10b981" if pct >= 70 else "#f59e0b" if pct >= 40 else "#ef4444"
 
         metrics_html = '<div class="audit-metric-row">'
         for m_icon, m_label, m_val, m_pct in [
-            ("🤖", "Faux Followers",  f"{ff_pct}%",  ff_pct),
-            ("🔍", "Activité Bots",   f"{bot_pct}%", bot_pct),
-            ("📝", "Qualité Contenu", f"{cq_pct}%",  cq_pct),
-            ("⚡", "Engagement",      f"{eng_pct}%", eng_pct),
+            ("🧬", "IGAudit ML",      f"{igaudit_pct}%", igaudit_pct),
+            ("🤖", "Faux Followers",  f"{ff_pct}%",      ff_pct),
+            ("🔍", "Activité Bots",   f"{bot_pct}%",     bot_pct),
+            ("📝", "Qualité Contenu", f"{cq_pct}%",      cq_pct),
+            ("⚡", "Engagement",      f"{eng_pct}%",     eng_pct),
         ]:
             bc = _bar_color(m_pct)
             metrics_html += f"""
@@ -377,7 +379,8 @@ elif current_slug == "audit":
         _signal_meta = [
             ("⚡", "Engagement", breakdown["engagement"], 25),
             ("📊", "Ratio F/S",  breakdown["ratio"], 15),
-            ("🤖", "Faux",       breakdown["fake_detect"], 15),
+            ("🧬", "IGAudit",    breakdown["igaudit"], 10),
+            ("🤖", "Faux",       breakdown["fake_detect"], 10),
             ("🔍", "Bots",       breakdown["bot_detect"], 10),
             ("📝", "Posts",      breakdown["consistency"], 10),
             ("👤", "Profil",     breakdown["completeness"], 10),
@@ -404,7 +407,14 @@ elif current_slug == "audit":
             'Activité Récente</div>',
             unsafe_allow_html=True,
         )
+        _igaudit_label = (
+            "Authentique" if breakdown["igaudit"] >= 7
+            else "Suspect" if breakdown["igaudit"] < 4
+            else "Mitigé"
+        )
         activities = [
+            ("🧬", "#7c6ff7", "IGAudit ML",
+             f"Authenticité compte : {breakdown['igaudit']:.1f}/10 — {_igaudit_label} (modèle Random Forest)"),
             ("🤖", "#10b981", "Détection bots",
              f"Score bots : {breakdown['bot_detect']:.1f}/10 — {'Sain' if breakdown['bot_detect'] >= 7 else 'Suspect'}"),
             ("❤️", "#e53e3e", "Taux d'engagement",
@@ -460,11 +470,11 @@ elif current_slug == "audit":
     with b2:
         st.markdown('<div class="stat-panel">', unsafe_allow_html=True)
         st.markdown('<div class="stat-panel-title">Radar des Signaux</div>', unsafe_allow_html=True)
-        categories_r = ["Engage", "Ratio", "Faux", "Bots", "Posts", "Profil", "Produit"]
-        maxvals_r    = [25, 15, 15, 10, 10, 10, 10]
-        vals_r       = [breakdown["engagement"], breakdown["ratio"], breakdown["fake_detect"],
-                        breakdown["bot_detect"], breakdown["consistency"], breakdown["completeness"],
-                        breakdown["product_match"]]
+        categories_r = ["Engage", "Ratio", "IGAudit", "Faux", "Bots", "Posts", "Profil", "Produit"]
+        maxvals_r    = [25, 15, 10, 10, 10, 10, 10, 10]
+        vals_r       = [breakdown["engagement"], breakdown["ratio"], breakdown["igaudit"],
+                        breakdown["fake_detect"], breakdown["bot_detect"], breakdown["consistency"],
+                        breakdown["completeness"], breakdown["product_match"]]
         pct_r = [round(v / m * 100) for v, m in zip(vals_r, maxvals_r)]
         fig_radar = go.Figure(go.Scatterpolar(
             r=pct_r + [pct_r[0]], theta=categories_r + [categories_r[0]],
@@ -489,10 +499,11 @@ elif current_slug == "audit":
     with b3:
         st.markdown('<div class="stat-panel">', unsafe_allow_html=True)
         st.markdown('<div class="stat-panel-title">Analyse Sentiments</div>', unsafe_allow_html=True)
-        signal_labels_b = ["Engage", "Ratio", "Faux", "Bots", "Posts", "Profil"]
-        signal_vals_b   = [breakdown["engagement"], breakdown["ratio"], breakdown["fake_detect"],
-                           breakdown["bot_detect"], breakdown["consistency"], breakdown["completeness"]]
-        signal_max_b    = [25, 15, 15, 10, 10, 10]
+        signal_labels_b = ["Engage", "Ratio", "IGAudit", "Faux", "Bots", "Posts", "Profil"]
+        signal_vals_b   = [breakdown["engagement"], breakdown["ratio"], breakdown["igaudit"],
+                           breakdown["fake_detect"], breakdown["bot_detect"],
+                           breakdown["consistency"], breakdown["completeness"]]
+        signal_max_b    = [25, 15, 10, 10, 10, 10, 10]
         bar_colors_b    = ["#10b981" if v/m >= 0.7 else "#f59e0b" if v/m >= 0.4 else "#ef4444"
                            for v, m in zip(signal_vals_b, signal_max_b)]
         fig_bar = go.Figure(go.Bar(
@@ -516,6 +527,7 @@ elif current_slug == "audit":
         score_summary = "✅ Profil authentique" if row.trust_score >= 80 else ("⚠️ À surveiller" if row.trust_score >= 50 else "❌ Profil suspect")
         notes = [
             ("🎯", f"Score global : {row.trust_score}/100"),
+            ("🧬", f"IGAudit ML : {breakdown['igaudit']:.1f}/10 pts"),
             ("📊", f"Engagement : {row.engagement_rate}% ({breakdown['engagement']:.1f}/25)"),
             ("🤖", f"Bots : {breakdown['bot_detect']:.1f}/10 pts"),
             ("👥", f"Followers : {row.followers:,}"),
@@ -906,23 +918,23 @@ elif current_slug == "ig":
 
         _has_sentiment = breakdown.get("sentiment") is not None
         if _has_sentiment:
-            categories = ["Engagement","Ratio","Faux followers","Bots",
+            categories = ["Engagement","Ratio","IGAudit","Faux followers","Bots",
                           "Consistance","Profil","Fit produit","Sentiment"]
-            maxvals = [25, 15, 15, 10, 10, 10, 10, 5]
-            _sent_val = max(0.0, min(5.0, breakdown["sentiment"] + 2.5))  # shift -10..+5 → 0..5
+            maxvals = [25, 15, 10, 10, 10, 10, 10, 10, 5]
+            _sent_val = max(0.0, min(5.0, breakdown["sentiment"] + 2.5))
             vals = [
-                breakdown["engagement"], breakdown["ratio"], breakdown["fake_detect"],
-                breakdown["bot_detect"], breakdown["consistency"], breakdown["completeness"],
-                breakdown["product_match"], _sent_val,
+                breakdown["engagement"], breakdown["ratio"], breakdown["igaudit"],
+                breakdown["fake_detect"], breakdown["bot_detect"], breakdown["consistency"],
+                breakdown["completeness"], breakdown["product_match"], _sent_val,
             ]
         else:
-            categories = ["Engagement","Ratio","Faux followers","Bots",
+            categories = ["Engagement","Ratio","IGAudit","Faux followers","Bots",
                           "Consistance","Profil","Fit produit"]
-            maxvals = [25, 15, 15, 10, 10, 10, 10]
+            maxvals = [25, 15, 10, 10, 10, 10, 10, 10]
             vals = [
-                breakdown["engagement"], breakdown["ratio"], breakdown["fake_detect"],
-                breakdown["bot_detect"], breakdown["consistency"], breakdown["completeness"],
-                breakdown["product_match"],
+                breakdown["engagement"], breakdown["ratio"], breakdown["igaudit"],
+                breakdown["fake_detect"], breakdown["bot_detect"], breakdown["consistency"],
+                breakdown["completeness"], breakdown["product_match"],
             ]
         pct = [round(v / m * 100) for v, m in zip(vals, maxvals)]
 
@@ -958,11 +970,11 @@ elif current_slug == "ig":
 
         with chart_col2:
             signal_labels = (
-                ["Engagement<br>(25)", "Ratio<br>(15)", "Faux<br>(15)",
+                ["Engagement<br>(25)", "Ratio<br>(15)", "IGAudit<br>(10)", "Faux<br>(10)",
                  "Bots<br>(10)", "Posts<br>(10)", "Profil<br>(10)",
                  "Produit<br>(10)", "Sentiment<br>(±)"]
                 if _has_sentiment else
-                ["Engagement<br>(25)", "Ratio<br>(15)", "Faux<br>(15)",
+                ["Engagement<br>(25)", "Ratio<br>(15)", "IGAudit<br>(10)", "Faux<br>(10)",
                  "Bots<br>(10)", "Posts<br>(10)", "Profil<br>(10)",
                  "Produit<br>(10)"]
             )

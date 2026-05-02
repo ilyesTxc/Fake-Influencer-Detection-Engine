@@ -56,6 +56,14 @@ def trust_score_node(state: InfluencerState) -> InfluencerState:
         bot_score = 3
     bot_score = max(1, min(5, bot_score))
 
+    # IGAudit model output — probability the account itself is fake
+    fake_prob = state.get("fake_probability")
+    try:
+        fake_prob = float(fake_prob) if fake_prob is not None else 0.5
+    except (TypeError, ValueError):
+        fake_prob = 0.5
+    fake_prob = max(0.0, min(1.0, fake_prob))
+
     product_match_score = state.get("product_match_score", 0.5)
     try:
         product_match_score = float(product_match_score)
@@ -87,16 +95,21 @@ def trust_score_node(state: InfluencerState) -> InfluencerState:
     else:
         sig2 = 1.5
 
-    # Signal 3: Fake follower estimate — combined ER-gap + IGAudit (15 pts)
+    # Signal 3: IGAudit — account-level authenticity from the ML classifier (10 pts)
+    # Direct output of igaudit_clf.pkl: how likely is the account itself to be fake?
+    sig_igaudit = (1.0 - fake_prob) * 10
+
+    # Signal 4: Fake follower estimate — ER-gap + ratio anomaly (10 pts)
+    # Measures bought/ghost followers, independent of whether the account looks fake.
     fake_follower_est = state.get("fake_follower_estimate")
     if fake_follower_est is None:
         fake_follower_est = state.get("fake_probability", 0.2)
-    sig3 = (1.0 - float(fake_follower_est)) * 15
+    sig3 = (1.0 - float(fake_follower_est)) * 10
 
-    # Signal 4: Bot detection score (10 pts)
+    # Signal 5: Bot detection score (10 pts)
     sig4 = (5.0 - bot_score) / 4.0 * 10
 
-    # Signal 5: Post consistency (10 pts)
+    # Signal 6: Post consistency (10 pts)
     posts_per_month = posts / age_months
     if posts_per_month >= 8:
         sig5 = 10.0
@@ -120,7 +133,7 @@ def trust_score_node(state: InfluencerState) -> InfluencerState:
     # Signal 7: Product fit (10 pts)
     sig8 = product_match_score * 10
 
-    raw = sig1 + sig2 + sig3 + sig4 + sig5 + sig6 + sig8
+    raw = sig1 + sig2 + sig_igaudit + sig3 + sig4 + sig5 + sig6 + sig8
 
     # ── Signal 9: Comment sentiment modifier ──────────────────────────────────
     # Only applied when we have real scraped comments.
@@ -151,12 +164,13 @@ def trust_score_node(state: InfluencerState) -> InfluencerState:
     breakdown = {
         "engagement":    round(sig1, 1),
         "ratio":         round(sig2, 1),
+        "igaudit":       round(sig_igaudit, 1),  # IGAudit ML classifier — account authenticity
         "fake_detect":   round(sig3, 1),
         "bot_detect":    round(sig4, 1),
         "consistency":   round(sig5, 1),
         "completeness":  round(sig6, 1),
         "product_match": round(sig8, 1),
-        "sentiment":     sig9,           # None for mock data, float for scraped
+        "sentiment":     sig9,
     }
 
     return {
